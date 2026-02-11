@@ -215,4 +215,50 @@ public class TestWebUI extends WebappUITestCase {
         Assertions.assertTrue(dim.getHeight() > 100);  // 132
         Assertions.assertTrue(dim.getHeight() < 150);  // 132
     }
+
+    /**
+     * Verifies that quick toolbar clear action empties the editor and triggers rendering.
+     */
+    @Test
+    public void testTouchToolbarClearAction() {
+        driver.get(getServerUrl());
+        Assertions.assertTrue(waitUntilUIIsLoaded(), "UI loading completed");
+        WebElement btnClear = driver.findElement(By.id("toolbar-editor-clear"));
+        btnClear.click();
+        Assertions.assertTrue(waitUntilAutoRefreshCompleted(), "Auto update done");
+        Assertions.assertEquals("", getEditorValue());
+    }
+
+    /**
+     * Verifies that paste and render uses clipboard source and updates editor text.
+     */
+    @Test
+    public void testTouchToolbarPasteRenderAction() {
+        driver.get(getServerUrl());
+        Assertions.assertTrue(waitUntilUIIsLoaded(), "UI loading completed");
+        js.executeScript(
+            "Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {" +
+            "readText: () => Promise.resolve('@startuml\\nAlice -> Bob : mobile toolbar\\n@enduml')," +
+            "writeText: () => Promise.resolve()" +
+            "}});"
+        );
+        WebElement btnPasteRender = driver.findElement(By.id("toolbar-editor-paste-render"));
+        btnPasteRender.click();
+        Assertions.assertTrue(waitUntilAutoRefreshCompleted(), "Auto update done");
+        Assertions.assertEquals("@startuml\nAlice -> Bob : mobile toolbar\n@enduml", getEditorValue());
+    }
+
+    /**
+     * Verifies diagram scale controls can adjust PNG rendering scale.
+     */
+    @Test
+    public void testDiagramScaleControls() {
+        driver.get(getServerUrl());
+        Assertions.assertTrue(waitUntilUIIsLoaded(), "UI loading completed");
+        driver.findElement(By.id("btn-scale-up")).click();
+        String pngWidth = driver.findElement(By.id("diagram-png")).getCssValue("width");
+        Assertions.assertTrue(pngWidth.endsWith("px"));
+        String scaleSelection = driver.findElement(By.id("diagram-scale-select")).getAttribute("value");
+        Assertions.assertEquals("1.25", scaleSelection);
+    }
 }

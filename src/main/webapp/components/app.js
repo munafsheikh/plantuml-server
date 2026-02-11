@@ -15,7 +15,10 @@ async function initApp() {
         encodedDiagram: analysedUrl.encodedDiagram,
         index: analysedUrl.index,
         numberOfDiagramPages: (code) ? getNumberOfDiagramPagesFromCode(code) : 1,
+        diagramScale: 1,
       };
+    } else {
+      document.appData.diagramScale = Number(document.appData.diagramScale) || 1;
     }
   }
 

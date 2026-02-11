@@ -25,6 +25,20 @@
     >
         <img src="assets/file-types/map.svg" alt="MAP" />
     </a>
+    <div class="diagram-scale-controls" aria-label="Diagram scale controls">
+      <button id="btn-scale-down" class="diagram-scale-btn" type="button" title="Decrease diagram scale">-</button>
+      <select id="diagram-scale-select" title="Diagram scale">
+        <option value="0.5">50%</option>
+        <option value="0.75">75%</option>
+        <option value="1" selected>100%</option>
+        <option value="1.25">125%</option>
+        <option value="1.5">150%</option>
+        <option value="2">200%</option>
+        <option value="3">300%</option>
+      </select>
+      <button id="btn-scale-up" class="diagram-scale-btn" type="button" title="Increase diagram scale">+</button>
+      <button id="btn-scale-fit" class="diagram-scale-btn" type="button" title="Fit diagram to available width">Fit</button>
+    </div>
     <div class="flex-main menu-r">
       <div class="btn-float-r">
         <input
