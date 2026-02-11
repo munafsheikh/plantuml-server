@@ -12,6 +12,62 @@
   align-items: center;
   flex: 1;
 }
+
+.monaco-editor-container .editor-touch-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: flex-end;
+  max-width: min(100%, 32rem);
+  padding: 0.4rem;
+  pointer-events: auto;
+}
+
+.monaco-editor-container .editor-touch-button {
+  background-color: var(--bg-color);
+  border: 2px solid var(--border-color-2);
+  border-radius: 0.5rem;
+  color: var(--font-color);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: bold;
+  min-height: 2.5rem;
+  min-width: 2.75rem;
+  padding: 0.35rem 0.65rem;
+}
+
+.monaco-editor-container .editor-touch-button:hover {
+  border-color: var(--font-color);
+}
+
+@media screen and (min-width: 900px) {
+  .monaco-editor-container .editor-touch-toolbar {
+    position: absolute;
+    right: 3.25rem;
+    top: 0.5rem;
+  }
+}
+
+@media screen and (max-width: 900px) {
+  .monaco-editor-container .editor-touch-toolbar {
+    justify-content: stretch;
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+    z-index: 3;
+  }
+
+  .monaco-editor-container .editor-touch-button {
+    flex: 1;
+    font-size: 0.8rem;
+    min-height: 2.75rem;
+  }
+
+  .monaco-editor-container #monaco-editor {
+    padding-top: 3.4rem;
+  }
+}
 .monaco-editor-container .editor-menu > div.menu-kebab {
   width: 60px;
   height: 60px;

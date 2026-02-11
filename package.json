@@ -1,0 +1,13 @@
+{
+  "name": "plantuml-server-ui-tests",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Playwright UI snapshot tests for PlantUML server",
+  "scripts": {
+    "test:ui": "playwright test",
+    "test:ui:update": "playwright test --update-snapshots"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0"
+  }
+}

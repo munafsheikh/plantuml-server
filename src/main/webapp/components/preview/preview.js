@@ -33,6 +33,7 @@ async function initPreview(view) {
   // add listener
   btnUndock.addEventListener("click", undock);
   // init preview components
+  initializeDiagramScaleControls();
   await initializeDiagram();
   initializePaginator()
   // check preview visibility

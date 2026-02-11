@@ -1,192 +1,196 @@
 name: Tests
 
 on:
-  - push
-  - pull_request
+  push:
+  pull_request:
+
+permissions:
+  contents: read
 
 jobs:
-  test-java-8-war-generation:
+  build:
+    name: Build (Java ${{ matrix.java-version }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java-version: [11, 17]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
-          fetch-depth: 0
-
-      - uses: actions/setup-java@v3
-        with:
-          distribution: "zulu"
-          java-version: 8
-          check-latest: true
-          cache: "maven"
-
-      - name: Remove test code (not java 8 compatible)
-        run: rm -rf src/test
-
-      - name: Generate war file (including apache-jsp artifact)
-        run: mvn --batch-mode -f pom.jdk8.xml -D java.net.useSystemProxies=true -Dapache-jsp.scope=compile clean package
-
-      - name: Generate war file
-        run: mvn --batch-mode -f pom.jdk8.xml -D java.net.useSystemProxies=true clean package
-
-      - name: temporarily save generated files
+          distribution: zulu
+          java-version: ${{ matrix.java-version }}
+          cache: maven
+      - name: Build WAR
+        run: mvn --batch-mode --no-transfer-progress clean package
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: war-jre8
+          name: build-war-java-${{ matrix.java-version }}
           path: target/plantuml.war
-          retention-days: 1
 
-  test-mvn-livecycle:
+  build-java-8-war:
+    name: Build Java 8 WAR compatibility
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 8
+          cache: maven
+      - name: Remove test code (not Java 8 compatible)
+        run: rm -rf src/test
+      - name: Build Java 8 WAR (with apache-jsp)
+        run: mvn --batch-mode --no-transfer-progress -f pom.jdk8.xml -Dapache-jsp.scope=compile clean package
+      - name: Upload Java 8 WAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-war-java-8
+          path: target/plantuml.war
+
+  unit-tests:
+    name: Unit/UI tests against embedded server (Java ${{ matrix.java-version }})
+    runs-on: ubuntu-latest
+    needs: build
     strategy:
       matrix:
-        java-version: [ 11, 17 ]
+        java-version: [11, 17]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
-          fetch-depth: 0
-
-      - uses: actions/setup-java@v3
-        with:
-          distribution: "zulu"
+          distribution: zulu
           java-version: ${{ matrix.java-version }}
-          check-latest: true
-          cache: "maven"
+          cache: maven
+      - name: Run unit + Selenium tests
+        run: mvn --batch-mode --no-transfer-progress clean test -DskipTests=false -Dgroups=\!graphviz-test
+      - name: Upload surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-unit-java-${{ matrix.java-version }}
+          path: |
+            target/surefire-reports
+            target/failsafe-reports
 
-      - name: Lifecycle - Step 1/8 - mvn clean
-        run: mvn --batch-mode clean
-
-      - name: Lifecycle - Step 2/8 - mvn validate
-        run: mvn --batch-mode validate
-
-      - name: Lifecycle - Step 3/8 - mvn compile
-        run: mvn --batch-mode compile
-
-      - name: Lifecycle - Step 4/8 - mvn test (with skipTests=true)
-        run: mvn --batch-mode test
-
-      - name: Lifecycle - Step 5/8 - mvn package
-        run: mvn --batch-mode package
-
-      - name: Lifecycle - Step 6/8 - mvn verify
-        run: mvn --batch-mode verify
-
-      - name: Lifecycle - Step 7/8 - mvn install
-        run: mvn --batch-mode install
-
-      - name: Lifecycle - Step 8/8 - mvn site
-        run: mvn --batch-mode site
-
-  test-embedded:
+  integration-tests-docker:
+    name: Docker integration tests (${{ matrix.container }}, Java ${{ matrix.java-version }})
     runs-on: ubuntu-latest
-    needs: test-mvn-livecycle
+    needs: build
     strategy:
       matrix:
-        java-version: [ 11, 17 ]
+        java-version: [11]
+        container: [jetty, tomcat]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
-          fetch-depth: 0
-
-      - uses: actions/setup-java@v3
-        with:
-          distribution: "zulu"
+          distribution: zulu
           java-version: ${{ matrix.java-version }}
-          check-latest: true
-          cache: "maven"
+          cache: maven
+      - name: Prepare tests
+        run: mvn --batch-mode --no-transfer-progress clean test
+      - name: Build docker image
+        run: docker image build -f Dockerfile.${{ matrix.container }} -t plantuml-server:local .
+      - name: Start docker image
+        run: docker run -d --hostname=test.localhost -p 8080:8080 -e BASE_URL=plantuml plantuml-server:local
+      - name: Run external server tests
+        run: mvn --batch-mode --no-transfer-progress test -DskipTests=false -DargLine="-Dsystem.test.server=http://localhost:8080/plantuml"
+      - name: Upload integration test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-docker-${{ matrix.container }}
+          path: |
+            target/surefire-reports
+            target/failsafe-reports
 
-      - name: Run tests against jetty embedded server
-        run: mvn --batch-mode clean test -DskipTests=false -Dgroups=\!graphviz-test
-
-  test-mvn-jetty-run:
+  playwright-ui-snapshot:
+    name: Playwright UI snapshot test
     runs-on: ubuntu-latest
-    needs: test-mvn-livecycle
-    strategy:
-      matrix:
-        java-version: [ 11, 17 ]
+    needs: build
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
-          fetch-depth: 0
-
-      - uses: actions/setup-java@v3
+          distribution: zulu
+          java-version: 17
+          cache: maven
+      - uses: actions/setup-node@v4
         with:
-          distribution: "zulu"
-          java-version: ${{ matrix.java-version }}
-          check-latest: true
-          cache: "maven"
-
-      - name: Prepare "mvn jetty:run" tests
-        run: mvn --batch-mode clean test
-
-      - name: Start jetty server over maven
-        run: mvn --batch-mode jetty:run &
-
-      - name: Wait 20 seconds (to let maven start the jetty server)
-        run: sleep 20s
-
-      - name: Run tests against "mvn jetty:run" server
-        run: mvn --batch-mode test -DskipTests=false -Dgroups=\!graphviz-test -DargLine="-Dsystem.test.server=http://localhost:8080/plantuml"
-
-  test-jetty:
-    runs-on: ubuntu-latest
-    needs: test-mvn-livecycle
-    strategy:
-      matrix:
-        java-version: [ 11, 17 ]
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-java@v3
-        with:
-          distribution: "zulu"
-          java-version: ${{ matrix.java-version }}
-          check-latest: true
-          cache: "maven"
-
-      - name: Prepare external tests
-        run: mvn --batch-mode clean test
-
-      - name: Build the jetty docker stack
+          node-version: 20
+      - name: Install npm dependencies
+        run: npm install
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: Start app (Jetty)
+        run: mvn --batch-mode --no-transfer-progress -DskipTests=true jetty:run &
+      - name: Wait for app startup
         run: |
-          docker image build -f Dockerfile.jetty -t plantuml-server:local .
-          docker run -d --hostname=test.localhost -p 8080:8080 -e BASE_URL=plantuml plantuml-server:local
+          for i in {1..60}; do
+            if curl -sf http://localhost:8080/plantuml/form >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Server did not start in time" >&2
+          exit 1
+      - name: Generate UI snapshots
+        run: npm run test:ui:update
+      - name: Validate UI snapshots
+        run: npm run test:ui
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+            tests/playwright/**/*.png
 
-      - name: Check running containers
-        run: docker ps
-
-      - name: run tests against jetty docker image
-        run: mvn --batch-mode test -DskipTests=false -DargLine="-Dsystem.test.server=http://localhost:8080/plantuml"
-
-  test-tomcat:
+  deploy-results-pages:
+    name: Deploy CI results to GitHub Pages
+    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
-    needs: test-mvn-livecycle
-    strategy:
-      matrix:
-        java-version: [ 11, 17 ]
+    needs:
+      - build
+      - build-java-8-war
+      - unit-tests
+      - integration-tests-docker
+      - playwright-ui-snapshot
+    permissions:
+      pages: write
+      id-token: write
+      contents: read
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v3
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          fetch-depth: 0
-
-      - uses: actions/setup-java@v3
-        with:
-          distribution: "zulu"
-          java-version: ${{ matrix.java-version }}
-          check-latest: true
-          cache: "maven"
-
-      - name: Prepare external tests
-        run: mvn --batch-mode clean test
-
-      - name: Build the tomcat docker stack
+          path: artifacts
+      - name: Build Pages content
         run: |
-          docker image build -f Dockerfile.tomcat -t plantuml-server:local .
-          docker run -d --hostname=test.localhost -p 8080:8080 -e BASE_URL=plantuml plantuml-server:local
-
-      - name: Check running containers
-        run: docker ps
-
-      - name: run tests against tomcat docker image
-        run: mvn --batch-mode test -DskipTests=false -DargLine="-Dsystem.test.server=http://localhost:8080/plantuml"
+          mkdir -p site
+          {
+            echo '<!doctype html><html><head><meta charset="utf-8"><title>PlantUML CI Results</title></head><body>'
+            echo '<h1>PlantUML CI Results</h1>'
+            echo '<p>Generated from workflow run.</p>'
+            echo '<h2>Artifacts</h2><ul>'
+            find artifacts -maxdepth 2 -type d | sed '1d' | while read -r d; do
+              name=$(basename "$d")
+              echo "<li><a href=\"$name/\">$name</a></li>"
+            done
+            echo '</ul></body></html>'
+          } > site/index.html
+          find artifacts -mindepth 1 -maxdepth 1 -type d -exec cp -R {} site/ \;
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
